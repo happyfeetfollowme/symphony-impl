@@ -192,8 +192,6 @@ class CodexRunner(AgentRunner):
             str(working_dir),
             "--sandbox",
             self.sandbox,
-            "--ask-for-approval",
-            self.approval_policy,
             "--skip-git-repo-check",
             "--json",
             "--output-last-message",

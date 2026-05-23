@@ -21,7 +21,8 @@ flowchart LR
 ## Lifecycle
 
 1. Plane work item is assigned to the agent and labeled `agent-ready`.
-2. The orchestrator polls Plane and normalizes the work item into a `Task`.
+2. The orchestrator polls Plane across the workspace, unless a single project is explicitly
+   selected, and normalizes each eligible work item into a `Task`.
 3. The task is claimed by moving Plane state to `In Progress` and writing a comment.
 4. An isolated execution context is created under `.symphony/workspaces/<task-id>`.
 5. A runner produces either a completed result or one or more action proposals.
@@ -58,7 +59,7 @@ checks states and labels, and can run a dry orchestration pass without mutations
 ```bash
 python3 -m symphony_general.cli plane-smoke --project-name "test project"
 python3 -m symphony_general.cli poll-once --project-name "test project" --dry-run
-python3 -m symphony_general.cli run-daemon --project-name "test project" --interval-seconds 30
+python3 -m symphony_general.cli run-daemon --interval-seconds 30
 ```
 
 The Plane API configuration is read from:

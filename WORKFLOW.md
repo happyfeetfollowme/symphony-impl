@@ -7,7 +7,8 @@ loaded by automation as a simple key-value contract.
 name: general-purpose-plane-symphony
 tracker:
   kind: plane
-  project_name: test project
+  scope: workspace
+  optional_project_name: test project
   ready_label: agent-ready
   agent_assignee: agent-worker
   states:

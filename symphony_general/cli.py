@@ -33,13 +33,13 @@ def main() -> int:
     sync_states.add_argument("--dry-run", action="store_true")
 
     poll = subparsers.add_parser("poll-once", help="Run one orchestration polling pass")
-    poll.add_argument("--project-name", default="test project")
+    poll.add_argument("--project-name", help="Limit polling to one project; omit for workspace-wide polling")
     poll.add_argument("--dry-run", action="store_true")
     poll.add_argument("--workspace-root", default=".symphony/workspaces")
     poll.add_argument("--audit-log", default=".symphony/audit/events.jsonl")
 
     daemon = subparsers.add_parser("run-daemon", help="Continuously poll Plane and run eligible work")
-    daemon.add_argument("--project-name", default="test project")
+    daemon.add_argument("--project-name", help="Limit polling to one project; omit for workspace-wide polling")
     daemon.add_argument("--fixture")
     daemon.add_argument("--dry-run", action="store_true")
     daemon.add_argument("--workspace-root", default=".symphony/workspaces")
@@ -103,7 +103,7 @@ def main() -> int:
     return 1
 
 
-def _plane_config_or_exit(parser: argparse.ArgumentParser, project_name: str) -> PlaneConfig:
+def _plane_config_or_exit(parser: argparse.ArgumentParser, project_name: str | None) -> PlaneConfig:
     try:
         return PlaneConfig.from_env(project_name)
     except RuntimeError as exc:

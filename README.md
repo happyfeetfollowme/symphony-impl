@@ -29,17 +29,18 @@ export PLANE_WORKSPACE_SLUG="your-workspace"
 
 python3 -m symphony_general.cli plane-smoke --project-name "test project"
 python3 -m symphony_general.cli sync-plane-states --project-name "test project" --dry-run
-python3 -m symphony_general.cli poll-once --project-name "test project" --dry-run
+python3 -m symphony_general.cli poll-once --dry-run
 ```
 
-`poll-once --dry-run` reads eligible Plane work items and exercises the orchestration path
-without mutating Plane state. Remove `--dry-run` only when the test project is safe to update.
+`poll-once --dry-run` reads eligible Plane work items across the workspace and exercises the
+orchestration path without mutating Plane state. Add `--project-name "test project"` only when
+you want to limit polling to one project. Remove `--dry-run` only when the workspace is safe to
+update.
 
 To run the worker continuously in the foreground:
 
 ```bash
 python3 -m symphony_general.cli run-daemon \
-  --project-name "test project" \
   --interval-seconds 30
 ```
 
@@ -59,7 +60,7 @@ export SYMPHONY_RUNNER="codex"
 export SYMPHONY_CODEX_WORKDIR="/Users/khc/Desktop/symphony-impl"
 export SYMPHONY_CODEX_APPROVAL_POLICY="never"
 
-python3 -m symphony_general.cli poll-once --project-name "test project"
+python3 -m symphony_general.cli poll-once
 ```
 
 Optional Codex settings:
@@ -74,7 +75,8 @@ Optional Codex settings:
 
 ## Plane Task Contract
 
-The Plane adapter looks for work items in the configured project that are:
+The Plane adapter looks for work items across the workspace, or in one configured project when
+`--project-name` is supplied, that are:
 
 - assigned to the configured agent assignee, if one is configured
 - in the configured todo state, default `Todo`, or the human approval state, default `Human Approved`

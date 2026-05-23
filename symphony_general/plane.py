@@ -32,7 +32,7 @@ class PlaneConfig:
     api_key: str
     workspace_slug: str
     project_id: str | None = None
-    project_name: str = "test project"
+    project_name: str | None = "test project"
     ready_label: str = "agent-ready"
     agent_assignee: str | None = "agent-worker"
     todo_state: str = "Todo"
@@ -44,7 +44,7 @@ class PlaneConfig:
     done_state: str = "Done"
 
     @classmethod
-    def from_env(cls, project_name: str = "test project") -> "PlaneConfig":
+    def from_env(cls, project_name: str | None = "test project") -> "PlaneConfig":
         missing = [
             key
             for key in ("PLANE_BASE_URL", "PLANE_API_KEY", "PLANE_WORKSPACE_SLUG")
@@ -77,15 +77,20 @@ class PlaneClient:
         return self._get_paginated(f"{self.base_api}/projects/")
 
     def find_project(self, name: str | None = None) -> dict[str, Any]:
-        expected = (name or self.config.project_name).casefold()
+        expected_name = name or self.config.project_name
+        if not expected_name:
+            raise LookupError("Plane project name is required for single-project operations")
+        expected = expected_name.casefold()
         for project in self.list_projects():
             if str(project.get("name", "")).casefold() == expected:
                 return project
-        raise LookupError(f"Plane project not found: {name or self.config.project_name}")
+        raise LookupError(f"Plane project not found: {expected_name}")
 
     def ensure_project_id(self) -> str:
         if self.config.project_id:
             return self.config.project_id
+        if not self.config.project_name:
+            raise RuntimeError("Project id is required for single-project operations")
         return str(self.find_project(self.config.project_name)["id"])
 
     def list_states(self, project_id: str | None = None) -> list[dict[str, Any]]:
@@ -97,6 +102,12 @@ class PlaneClient:
         return self._get_paginated(f"{self.base_api}/projects/{project_id}/labels/")
 
     def list_work_items(self, project_id: str | None = None) -> list[dict[str, Any]]:
+        if not project_id and not self.config.project_id and not self.config.project_name:
+            items: list[dict[str, Any]] = []
+            for project in self.list_projects():
+                items.extend(self.list_work_items(str(project["id"])))
+            return items
+
         project_id = project_id or self.ensure_project_id()
         query = urllib.parse.urlencode({"expand": "state,labels,assignees"})
         return self._get_paginated(f"{self.base_api}/projects/{project_id}/work-items/?{query}")
@@ -110,32 +121,32 @@ class PlaneClient:
         ]
 
     def claim_task(self, task: Task) -> None:
-        self.update_state(task.id, self.config.in_progress_state)
-        self.add_comment(task.id, "Symphony claimed this work item for agent execution.")
+        self.update_state(task.id, self.config.in_progress_state, task.project_id)
+        self.add_comment(task.id, "Symphony claimed this work item for agent execution.", task.project_id)
 
     def mark_needs_human(self, task: Task, body: str) -> None:
-        self.update_state(task.id, self.config.needs_human_state)
-        self.add_comment(task.id, body)
+        self.update_state(task.id, self.config.needs_human_state, task.project_id)
+        self.add_comment(task.id, body, task.project_id)
 
     def sync_success(self, task: Task, body: str) -> None:
-        self.update_state(task.id, self.config.in_review_state)
-        self.add_comment(task.id, body)
+        self.update_state(task.id, self.config.in_review_state, task.project_id)
+        self.add_comment(task.id, body, task.project_id)
 
     def sync_done(self, task: Task, body: str) -> None:
-        self.update_state(task.id, self.config.done_state)
-        self.add_comment(task.id, body)
+        self.update_state(task.id, self.config.done_state, task.project_id)
+        self.add_comment(task.id, body, task.project_id)
 
     def sync_failure(self, task: Task, body: str) -> None:
-        self.update_state(task.id, self.config.blocked_state)
-        self.add_comment(task.id, body)
+        self.update_state(task.id, self.config.blocked_state, task.project_id)
+        self.add_comment(task.id, body, task.project_id)
 
-    def update_state(self, work_item_id: str, state_name: str) -> None:
-        state_id = self._state_id_by_name(state_name)
-        self._patch(f"{self._work_item_url(work_item_id)}/", {"state": state_id})
+    def update_state(self, work_item_id: str, state_name: str, project_id: str | None = None) -> None:
+        state_id = self._state_id_by_name(state_name, project_id)
+        self._patch(f"{self._work_item_url(work_item_id, project_id)}/", {"state": state_id})
 
-    def add_comment(self, work_item_id: str, body: str) -> None:
+    def add_comment(self, work_item_id: str, body: str, project_id: str | None = None) -> None:
         comment_html = "<p>" + escape(body).replace("\n", "<br>") + "</p>"
-        self._post(f"{self._work_item_url(work_item_id)}/comments/", {"comment_html": comment_html})
+        self._post(f"{self._work_item_url(work_item_id, project_id)}/comments/", {"comment_html": comment_html})
 
     def smoke_check(self, project_name: str = "test project") -> dict[str, Any]:
         project = self.find_project(project_name)
@@ -225,12 +236,12 @@ class PlaneClient:
             "states": [str(state.get("name", "")) for state in self.list_states(project_id)] if not self.dry_run else [],
         }
 
-    def _work_item_url(self, work_item_id: str) -> str:
-        project_id = self.ensure_project_id()
+    def _work_item_url(self, work_item_id: str, project_id: str | None = None) -> str:
+        project_id = project_id or self.ensure_project_id()
         return f"{self.base_api}/projects/{project_id}/work-items/{work_item_id}"
 
-    def _state_id_by_name(self, state_name: str) -> str:
-        for state in self.list_states():
+    def _state_id_by_name(self, state_name: str, project_id: str | None = None) -> str:
+        for state in self.list_states(project_id):
             if str(state.get("name", "")).casefold() == state_name.casefold():
                 return str(state["id"])
         raise LookupError(f"Plane state not found: {state_name}")
