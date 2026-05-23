@@ -1,0 +1,38 @@
+{
+  "project": {
+    "id": "project-test",
+    "name": "test project"
+  },
+  "work_items": [
+    {
+      "id": "issue-1",
+      "sequence_id": 101,
+      "name": "Draft onboarding email for beta users",
+      "description_html": "<p>Create a concise onboarding email for the beta cohort.</p>",
+      "state": {
+        "id": "state-todo",
+        "name": "Todo"
+      },
+      "labels": [
+        {
+          "id": "label-ready",
+          "name": "agent-ready"
+        },
+        {
+          "id": "label-risk",
+          "name": "risk:medium"
+        },
+        {
+          "id": "label-type",
+          "name": "type:email"
+        }
+      ],
+      "assignees": [
+        {
+          "id": "user-agent",
+          "display_name": "agent-worker"
+        }
+      ]
+    }
+  ]
+}
