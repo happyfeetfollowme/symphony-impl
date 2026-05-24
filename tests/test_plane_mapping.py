@@ -18,6 +18,21 @@ class FakeWorkspacePlaneClient(PlaneClient):
     def _get_paginated(self, url: str) -> list[dict]:
         if url.endswith("/projects/"):
             return [{"id": "project-a", "name": "A"}, {"id": "project-b", "name": "B"}]
+        if "/projects/project-b/work-items/issue-b/comments/" in url:
+            return [
+                {
+                    "id": "comment-0",
+                    "created_at": "2026-05-23T11:55:00Z",
+                    "created_by": "symphony",
+                    "comment_html": "<p>Symphony completed run run-prev.</p><p>Added the draft plan.</p>",
+                },
+                {
+                    "id": "comment-1",
+                    "created_at": "2026-05-23T12:00:00Z",
+                    "created_by": "user-1",
+                    "comment_html": "<p>@agent-worker please add the follow-up section.</p>",
+                }
+            ]
         if "/projects/project-a/work-items/" in url:
             return []
         if "/projects/project-b/work-items/" in url:
@@ -79,6 +94,16 @@ class PlaneMappingTest(unittest.TestCase):
         self.assertEqual(tasks[0].project_id, "project-b")
         self.assertIn("/projects/project-b/work-items/issue-b/", client.patches[0][0])
         self.assertIn("/projects/project-b/work-items/issue-b/comments/", client.posts[0][0])
+
+    def test_candidate_task_includes_latest_agent_trigger_comment(self) -> None:
+        client = FakeWorkspacePlaneClient()
+
+        task = client.list_candidate_tasks()[0]
+
+        self.assertEqual(task.raw["symphony_trigger_comment"]["id"], "comment-1")
+        self.assertIn("follow-up section", task.raw["symphony_trigger_comment"]["text"])
+        self.assertEqual(len(task.raw["symphony_recent_comments"]), 2)
+        self.assertIn("Added the draft plan", task.raw["symphony_recent_comments"][0]["text"])
 
 
 if __name__ == "__main__":

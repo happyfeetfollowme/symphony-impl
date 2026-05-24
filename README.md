@@ -88,4 +88,20 @@ for approval. Moving the item to `Human Approved` lets Symphony resume, execute 
 proposals, and close it as `Done`. Completed agent handoff moves to `In Review`; failures move
 to `Blocked`.
 
+If a human adds a Plane comment mentioning `agent-worker`, Symphony includes the latest matching
+comment as an additional agent prompt when the item is picked up. This does not change pickup
+rules by itself; the work item still needs the normal ready label, assignee, and pickup state.
+
+Tickets and `agent-worker` trigger comments can also specify a Codex working location:
+
+```text
+target_path: /absolute/path/to/project-or-file
+```
+
+When present, `target_path` takes precedence over `SYMPHONY_CODEX_WORKDIR`. A directory path is
+used as the Codex working directory. A file path uses its parent directory as the working directory
+and is included in the prompt as the requested file to create or update. If no `target_path` is
+provided, Symphony keeps the existing fallback order: `SYMPHONY_CODEX_WORKDIR`, then the isolated
+task workspace.
+
 See [docs/architecture.md](docs/architecture.md) and [WORKFLOW.md](WORKFLOW.md).

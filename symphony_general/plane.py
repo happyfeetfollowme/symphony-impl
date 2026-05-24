@@ -5,7 +5,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html import escape
 from html.parser import HTMLParser
 from typing import Any, Iterable
@@ -101,6 +101,9 @@ class PlaneClient:
         project_id = project_id or self.ensure_project_id()
         return self._get_paginated(f"{self.base_api}/projects/{project_id}/labels/")
 
+    def list_comments(self, work_item_id: str, project_id: str | None = None) -> list[dict[str, Any]]:
+        return self._get_paginated(f"{self._work_item_url(work_item_id, project_id)}/comments/")
+
     def list_work_items(self, project_id: str | None = None) -> list[dict[str, Any]]:
         if not project_id and not self.config.project_id and not self.config.project_name:
             items: list[dict[str, Any]] = []
@@ -113,12 +116,12 @@ class PlaneClient:
         return self._get_paginated(f"{self.base_api}/projects/{project_id}/work-items/?{query}")
 
     def list_candidate_tasks(self, project_id: str | None = None) -> list[Task]:
-        return [
-            task
-            for item in self.list_work_items(project_id)
-            if (task := self._task_from_work_item(item))
-            and self._is_candidate(task)
-        ]
+        tasks: list[Task] = []
+        for item in self.list_work_items(project_id):
+            task = self._task_from_work_item(item)
+            if task and self._is_candidate(task):
+                tasks.append(self._with_comment_context(task))
+        return tasks
 
     def claim_task(self, task: Task) -> None:
         self.update_state(task.id, self.config.in_progress_state, task.project_id)
@@ -284,6 +287,61 @@ class PlaneClient:
             target_systems=(target_system,) if target_system else (),
             raw=item,
         )
+
+    def _with_comment_context(self, task: Task) -> Task:
+        if not task.project_id:
+            return task
+
+        comments = self.list_comments(task.id, task.project_id)
+        parsed = [comment for comment in (self._comment_context(comment) for comment in comments) if comment]
+        trigger_comments = [
+            comment
+            for comment in parsed
+            if self._is_agent_trigger_comment(comment["text"])
+            and not self._is_symphony_comment(comment["text"])
+        ]
+        if not trigger_comments:
+            return replace(task, raw={**task.raw, "symphony_recent_comments": parsed})
+
+        latest = max(trigger_comments, key=lambda comment: str(comment.get("created_at") or ""))
+        return replace(
+            task,
+            raw={
+                **task.raw,
+                "symphony_trigger_comment": latest,
+                "symphony_recent_comments": parsed,
+            },
+        )
+
+    def _comment_context(self, comment: dict[str, Any]) -> dict[str, str] | None:
+        text = self._comment_text(comment)
+        if not text:
+            return None
+        return {
+            "id": str(comment.get("id") or ""),
+            "created_at": str(comment.get("created_at") or ""),
+            "created_by": str(comment.get("created_by") or comment.get("actor") or ""),
+            "text": text,
+        }
+
+    def _comment_text(self, comment: dict[str, Any]) -> str:
+        if comment.get("comment_stripped"):
+            return str(comment["comment_stripped"]).strip()
+        if comment.get("comment_html"):
+            parser = _HTMLTextExtractor()
+            parser.feed(str(comment["comment_html"]))
+            return parser.text().strip()
+        return str(comment.get("comment") or "").strip()
+
+    def _is_agent_trigger_comment(self, text: str) -> bool:
+        assignee = self.config.agent_assignee
+        if not assignee:
+            return False
+        pattern = rf"(^|[^A-Za-z0-9_.-])@?{re.escape(assignee)}([^A-Za-z0-9_.-]|$)"
+        return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+    def _is_symphony_comment(self, text: str) -> bool:
+        return text.strip().casefold().startswith("symphony ")
 
     def _description(self, item: dict[str, Any]) -> str:
         if item.get("description_stripped"):
