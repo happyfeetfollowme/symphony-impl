@@ -59,6 +59,7 @@ To run eligible tasks with Codex instead of the deterministic proposal-only runn
 export SYMPHONY_RUNNER="codex"
 export SYMPHONY_CODEX_WORKDIR="/Users/khc/Desktop/symphony-impl"
 export SYMPHONY_CODEX_APPROVAL_POLICY="never"
+export SYMPHONY_MAX_CONCURRENCY="1"
 
 python3 -m symphony_general.cli poll-once
 ```
@@ -70,8 +71,14 @@ Optional Codex settings:
 - `SYMPHONY_CODEX_SANDBOX`, default `workspace-write`
 - `SYMPHONY_CODEX_TIMEOUT_SECONDS`, default `900`
 - `SYMPHONY_CODEX_EXTRA_ARGS`, shell-style extra arguments passed to `codex exec`
+- `SYMPHONY_MAX_CONCURRENCY`, default `1`; set above `1` to run multiple eligible tickets concurrently
 - `SYMPHONY_DAEMON_INTERVAL_SECONDS`, default `30`
 - `SYMPHONY_DAEMON_FAILURE_BACKOFF_SECONDS`, default `60`
+
+`poll-once` waits for the tickets it dispatches and lets the orchestrator write summaries and state
+transitions back to Plane. `run-daemon` keeps the orchestrator alive across polling cycles, dispatches
+up to the concurrency limit, and reaps completed agent runs on later cycles while retaining the same
+orchestrator-owned Plane sync behavior.
 
 ## Plane Task Contract
 

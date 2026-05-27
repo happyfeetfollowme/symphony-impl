@@ -37,6 +37,12 @@ def main() -> int:
     poll.add_argument("--dry-run", action="store_true")
     poll.add_argument("--workspace-root", default=".symphony/workspaces")
     poll.add_argument("--audit-log", default=".symphony/audit/events.jsonl")
+    poll.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=int(os.environ.get("SYMPHONY_MAX_CONCURRENCY", "1")),
+        help="Maximum number of agent runs to execute concurrently",
+    )
 
     daemon = subparsers.add_parser("run-daemon", help="Continuously poll Plane and run eligible work")
     daemon.add_argument("--project-name", help="Limit polling to one project; omit for workspace-wide polling")
@@ -44,6 +50,12 @@ def main() -> int:
     daemon.add_argument("--dry-run", action="store_true")
     daemon.add_argument("--workspace-root", default=".symphony/workspaces")
     daemon.add_argument("--audit-log", default=".symphony/audit/events.jsonl")
+    daemon.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=int(os.environ.get("SYMPHONY_MAX_CONCURRENCY", "1")),
+        help="Maximum number of agent runs to execute concurrently",
+    )
     daemon.add_argument(
         "--interval-seconds",
         type=float,
@@ -76,7 +88,13 @@ def main() -> int:
 
     if args.command == "poll-once":
         source = PlaneClient(_plane_config_or_exit(parser, args.project_name), dry_run=args.dry_run)
-        summary = _build_orchestrator(source, args.workspace_root, args.audit_log, dry_run=args.dry_run).poll_once()
+        summary = _build_orchestrator(
+            source,
+            args.workspace_root,
+            args.audit_log,
+            dry_run=args.dry_run,
+            max_concurrency=args.max_concurrency,
+        ).poll_once()
         print(json.dumps(_summary(summary, []), indent=2))
         return 0
 
@@ -89,6 +107,7 @@ def main() -> int:
                 args.audit_log,
                 dry_run=args.dry_run or bool(args.fixture),
                 audit_log=audit_log,
+                max_concurrency=args.max_concurrency,
             ),
             audit_log=audit_log,
             config=DaemonConfig(
@@ -122,6 +141,7 @@ def _build_orchestrator(
     audit_log_path: str,
     dry_run: bool,
     audit_log: AuditLog | None = None,
+    max_concurrency: int = 1,
 ) -> Orchestrator:
     audit_log = audit_log or AuditLog(Path(audit_log_path))
     approval_gate = ApprovalGate(audit_log)
@@ -132,6 +152,7 @@ def _build_orchestrator(
         approval_gate=approval_gate,
         action_executor=ActionExecutor(approval_gate, audit_log, dry_run=dry_run),
         audit_log=audit_log,
+        max_concurrency=max_concurrency,
         workflow={
             "name": "general-purpose-plane-symphony",
             "human_approved_state": "Human Approved",

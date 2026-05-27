@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+try:
+    from datetime import UTC
+except ImportError:  # pragma: no cover - Python < 3.11 compatibility.
+    UTC = timezone.utc
+
+try:
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - Python < 3.11 compatibility.
+    class StrEnum(str, Enum):
+        pass
 
 
 def utc_now() -> str:

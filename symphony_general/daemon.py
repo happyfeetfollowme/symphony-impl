@@ -58,36 +58,52 @@ class SymphonyDaemon:
         )
 
         cycle = 0
-        while not self._stop_requested.is_set():
-            cycle += 1
-            sleep_seconds = self.config.interval_seconds
+        orchestrator = self.orchestrator_factory()
+        try:
+            while not self._stop_requested.is_set():
+                cycle += 1
+                sleep_seconds = self.config.interval_seconds
 
-            try:
-                summary = self.orchestrator_factory().poll_once()
-                payload = {
-                    "event": "daemon.cycle",
-                    "created_at": utc_now(),
-                    "cycle": cycle,
-                    "summary": poll_summary_dict(summary),
-                }
-                self.audit_log.record("daemon.cycle", payload)
-                self._emit(payload)
-            except Exception as exc:  # noqa: BLE001 - daemon boundary converts errors to logs.
-                sleep_seconds = self.config.failure_backoff_seconds
-                payload = {
-                    "event": "daemon.cycle_failed",
-                    "created_at": utc_now(),
-                    "cycle": cycle,
-                    "error": str(exc),
-                }
-                self.audit_log.record("daemon.cycle_failed", payload)
-                self._emit(payload)
+                try:
+                    summary = orchestrator.poll_once(wait_for_completion=False)
+                    payload = {
+                        "event": "daemon.cycle",
+                        "created_at": utc_now(),
+                        "cycle": cycle,
+                        "summary": poll_summary_dict(summary),
+                    }
+                    self.audit_log.record("daemon.cycle", payload)
+                    self._emit(payload)
+                except Exception as exc:  # noqa: BLE001 - daemon boundary converts errors to logs.
+                    sleep_seconds = self.config.failure_backoff_seconds
+                    payload = {
+                        "event": "daemon.cycle_failed",
+                        "created_at": utc_now(),
+                        "cycle": cycle,
+                        "error": str(exc),
+                    }
+                    self.audit_log.record("daemon.cycle_failed", payload)
+                    self._emit(payload)
 
-            if self.config.max_cycles is not None and cycle >= self.config.max_cycles:
-                break
+                if self.config.max_cycles is not None and cycle >= self.config.max_cycles:
+                    break
 
-            if sleep_seconds > 0:
-                self._stop_requested.wait(sleep_seconds)
+                if sleep_seconds > 0:
+                    self._stop_requested.wait(sleep_seconds)
+        finally:
+            if hasattr(orchestrator, "drain_running"):
+                summary = orchestrator.drain_running()
+                if summary.results or summary.completed or summary.pending_approval or summary.failed:
+                    payload = {
+                        "event": "daemon.drain",
+                        "created_at": utc_now(),
+                        "cycle": cycle,
+                        "summary": poll_summary_dict(summary),
+                    }
+                    self.audit_log.record("daemon.drain", payload)
+                    self._emit(payload)
+            if hasattr(orchestrator, "shutdown"):
+                orchestrator.shutdown(wait_for_running=True)
 
         stop_payload = {
             "event": "daemon.stopped",

@@ -15,7 +15,7 @@ class FakeOrchestrator:
     def __init__(self) -> None:
         self.calls = 0
 
-    def poll_once(self) -> PollSummary:
+    def poll_once(self, wait_for_completion: bool = True) -> PollSummary:
         self.calls += 1
         return PollSummary(
             candidates=1,
